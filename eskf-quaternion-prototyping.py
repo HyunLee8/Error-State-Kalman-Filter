@@ -36,7 +36,7 @@ def propogate_nominal_state(q, wb, wm, wn):
     return X_dot
 
 """Error State Methods"""
-#READER, DONT WORRY ABOUT THIS (this is just to organize my thoughts)
+#(this is just to organize my thoughts)
 #u = W_measured - W_bias -> u is a matrix with wx, wy, wz (I need to flatten this later in skew symmetric)
 #skew_symmetric_matrix(input)
 
@@ -63,8 +63,40 @@ def propogate_error_state(wm, wn, am, an, dt):
     zero = np.zeros((3,3))
     Fk = np.array([[R_t, -dt*I],
                    [zero, I]])
-    
-    
+
+
+################################################################################################
+"""Redoing propogating normal states"""
+
+#i need xt= [pt, vt, qt, abt, wbt, gt]
+def update_position(p, v, a, dt):
+    p_next = p + vk*dt + 0.5*ak*(dt**2)
+    return p_next
+
+def update_velocity(v, a, dt):
+    v_next = vk + ak*dt
+    return v_next
+
+def update_orientation(q, wb, wm, wn, dt):
+    q_dot = quaternion_derivative(q, wm - wb - wn)
+    q_next = q + q_dot*dt
+    #quaternion values should add up to 1 below
+    q_next = q_next / np.linalg.norm(q_next)
+    return q_next
+
+def update_accel_bias(ab, ):
+    ab_next = ab + 
+
+def propogate_nominal_state():
+    p = update_position()
+    v = update_velocity()
+    q = update_orientation()
+    ab = update_accel_bias()
+    wb = update_gyro_bias()
+    g = update_gravity()
+
+    xt_dot = np.vstack((p, v, q, ab, wb, g))
+    return xt_dot
 
 
 if __name__ == "__main__":
@@ -112,5 +144,6 @@ if __name__ == "__main__":
         #Uk = np.vstack((Ua, Uw))
         #phi = Uk * dt
 
-        #Now i need
+        #Now i need [[delta_theta_k], [delta_wb_k]]
+        # delta_theta = 
         delta_Xk = propogate_error_state(wm, wn, am, an, dt)

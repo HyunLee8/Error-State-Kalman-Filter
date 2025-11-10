@@ -2,6 +2,9 @@
 import math
 import numpy as np
 import pandas as pd
+from quaternion import Quaternion
+from numpy.linalg import norm
+
 df = pd.read_csv('IMU_data.csv')
 
 """Nominal State Methods"""
@@ -14,8 +17,8 @@ def propogate_nominal_state():
     wb = update_gyro_bias()
     g = update_gravity()
 
-    xt_dot = np.vstack((p, v, q, ab, wb, g))
-    return xt_dot
+    x = np.vstack((p, v, q, ab, wb, g))
+    return xt
 
 def omega_matrix(omega):
     wx, wy, wz = omega.flatten()
@@ -30,14 +33,24 @@ def quaternion_derivative(q, omega):
     q_dot = 0.5 * q @ Omega
     return q_dot
 
-def update_bias():
+def update_w_bias():
     wxw = 1e-5
     wyw = 2e-5
     wzw = 1.5e-5
     process_noise = np.array([[wxw], [wyw], [wzw]])
     return process_noise
 
-def bias_derivative(process_noise):
+def update_a_bias():
+    axw = 1e-4
+    ayw = 1.2e-4
+    azw = 1.5e-4
+    process_noise = np.array([[axw], [ayw], [azw]])
+    return process_noise
+
+def w_bias_derivative(process_noise):
+    return process_noise
+
+def a_bias_derivative(process_noise):
     return process_noise
 
 #i need xt= [pt, vt, qt, abt, wbt, gt]
@@ -57,10 +70,11 @@ def update_orientation(q, wb, wm, wn, dt):
     return q_next
 
 def update_accel_bias(ab, ):
-    ab_next = ab + #look into this later
+    ab_next = ab + a_bias_derivative(update_a_bias()) * dt
+    return ab_next
 
 def update_gyro_bias(wb, dt):
-    wb_next = wb + bias_derivative(update_bias()) * dt
+    wb_next = wb + w_bias_derivative(update_w_bias()) * dt
     return wb_next 
 
 """Error State Methods"""

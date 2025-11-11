@@ -1,3 +1,5 @@
+"""WORK IN PROGRESS"""
+
 import numpy as np
 from propopating-nominal-error import propogate_nominal_state, propogate_error_state, Covariance, StateTransitionMatrix
 from pyquaternion import Quaternion

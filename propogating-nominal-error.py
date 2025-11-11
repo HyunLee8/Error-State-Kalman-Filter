@@ -1,3 +1,5 @@
+"""WORK IN PROGRESS"""
+
 """Implementation of an Error State Kalman Filter (ESKF) using quaternions for orientation representation."""
 import math
 import numpy as np

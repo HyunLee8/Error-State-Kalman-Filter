@@ -48,16 +48,16 @@ wx, wy, wz = gyroscope measurements
 mag_x, mag_y, mag_z = magnetometer measurements
 roll, pitch, yaw = euler angles from IMU
 """
-def imu_inputs(am, wm, mag_m, euler_angles, dt):
-    return [am, wm, mag_m, euler_angles, dt]
+def imu_inputs(am, wm, mag_m, euler_angles):
+    return [am, wm, mag_m, euler_angles]
 
-def get_u_corrected(am, wm, ab, wb, dt):
-    return np.array([[am - ab], [wm - wb], [dt]])
+def get_u_corrected(am, wm, ab, wb):
+    return np.array([[am - ab], [wm - wb]])
 
 
 """
 NOISE VECTOR
 sigma
 """
-def get_Q(sigma_a_noise, sigma_w_noise, sigma_a_walk, sigma_w_walk):
+def get_sigmas(sigma_a_noise, sigma_w_noise, sigma_a_walk, sigma_w_walk):
     return w = [np.array([[sigma_a_noise], [sigma_w_noise], [sigma_a_walk], [sigma_w_walk]])]

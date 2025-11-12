@@ -108,7 +108,9 @@ def prediction_step(x, P, U, w, dt):
                     [Z3, Z3, Z3, Z3, Z3,      I]])
 
     #PREDICTION STEP COVARIANCE UPDATE
-    P = Fx @ P @ Fx.T + F_i @ Q_i @ F_i.T
+    P = F_x @ P @ F_x.T + F_i @ Q_i @ F_i.T
 
     #LFG
     return x, P
+
+def update_step():

@@ -52,6 +52,11 @@ mag_x = imu_data['MagX(uT)'].[i]
 mag_y = imu_data['MagY(uT)'].[i]
 mag_z = imu_data['MagZ(uT)'].[i]
 roll, pitch, yaw = imu_data['Roll(deg)'].[i], imu_data['Pitch(deg)'].[i], imu_data['Yaw(deg)'].[i]
+am = np.array([[ax], [ay], [az]])
+wm = np.array([[wx], [wy], [wz]])
+magm = np.array([[mag_x], [mag_y], [mag_z]])
+euler_angles = np.array([[roll], [pitch], [yaw]])
+imu_data = np.vstack((am, wm, magm, euler_angles))
 
 """
 NOISE VECOTR

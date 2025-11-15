@@ -22,15 +22,16 @@ def skew_symmetric(v):
 
 def q_skew_symmetric(q):
     qw, qx, qy, qz = q
-    return np.array([[-qx, -qy, -qz],
-                     [qw, -qz, qy],
-                     [qz, qw, -qx],
-                     [-qy, qx, qw]])
+    return np.array([
+        [q0, -q3, q2],
+        [q3, q0, -q1],
+        [-q2, q1, q0]
+    ])
 
 def q_rot(three_dimensional_theta):
     angle = norm(three_dimensional_theta)
     #this normlizes the axis. Tilts in the actual direction its going
-    if theta > 0:
+    if angle > 0:
         return Quaternion(axis = theta/angle, angle=angle)
     else:
         axis = [1, 0, 0] 
@@ -132,17 +133,18 @@ def update_step(imu_data, x, P, V, dt, altimeter_data, gps_data):
     V: measurement noise covariance matrix
     dt: time step
     """
-    orientation = Quaternion(array=x[6:10])
-    R = orientation.rotation_matrix
-
+    #these are the measurements from the IMU, gps, and altimeter
     y_a = imu_data[0:3]
     y_m = imu_data[6:9]
     y_z = altimeter_data
     y_p = gps_data
-    
-    b = np.array([[1], [0], [0]]) #magnetic field in global frame
-    g = x[16:-1]                  #gravity vector from state
 
+    #magnetic field in global frame
+    #gravity vector from state
+    b = np.array([[1], [0], [0]])
+    g = x[16:-1]
+
+    #creates a matrix for predictions and sensor_data either with or without GPS
     if use_position():
         y_a_pred = R.T @ g
         y_m_pred = R.T @ b
@@ -157,21 +159,62 @@ def update_step(imu_data, x, P, V, dt, altimeter_data, gps_data):
         y_z_pred = x[2]
         y_pred = np.vstack((y_a_pred, y_m_pred, y_z_pred))
         y = np.vstack((y_a, y_m, y_z))
-        dim  7
+        dim = 7
     
+    #gets the skew matrix of gravity and magnetic field
     g_cross = skew_symmetric(g)
     b_cross = skew_symmetric(b)
     q = x[6:10]
-    three_d_theta = (imu_data[3:6]-x[13:16])*dt
-    delta_q = q_rot(three_d_theta).elements
 
-    H_y_a = -R(q).T @ g_cross @ delta_q
-    H_y_m = 
+    #perform rotation
+    orientation = Quaternion(array=x[6:10])
+    R = orientation.rotation_matrix
 
+    #jacobian matrix for measurement model
+    H_a = -R(q).T @ g_cross
+    H_m = -R(q).T @ b_cross
+    H_ya_ma_wrt_q = np.vstack((H_a, H_m))
 
+    H_x = np.zeros((dim, 16))
+    H_x[0:6, 6:10] = H_ya_ma_wrt
 
-    #K = P @ H.T @ (H @ P @ H.T + V).inv
-    #P = (I - K @ H) @ P
-    #return x, P
+    #=================#
+    # I M P O R T A N T
+    #=================#
+    #IMPLEMENT ALTIMETER AND GPS MEASUREMENT JACOBIANS HERE LATER
+    if use_position():
+        H_x[6:8, 0:2] = np.eye(2) # sets the joacobian for position measurements x, y
+        H_x[8:, 2:3] = 1          # sets the jacobian for altimeter z np.eye(1) = 1
+    else:
+        H[6:, 2:3] = 1      
+
+    Q_x = 0.5 * np.vstack(( -q[1:], skew_symmetric(q))) # adds a stack to the top because its a 4x3 matrix hence -q[]
+
+    #Jacobian true state with respect to error state
+    X_x = np.zeros((15,16))
+    X_x[6:10, 6:9] = Q_x 
+    X_x[0:6, 0:6] = np.eye(6)
+    X_x[10:, 9:] = np.eye(6)
+
+    #state to sensor measurement jacobian
+    H = H_x @ X_x
+
+    #Kalman Gain -> high = more trust in measurements, low = more trust in prediction
+    K = P @ H.T @ (H @ P @ H.T + V).inv
+    #error gain computation 
+    error_gain = K @ (y - y_pred)
+    # update Quaternion with small angle approx.
+    # q = q_old ⊗ δq
+    x[6:10] = (Quaternion(array=x[6:10]) * q_rot(error_gain[6:9])).normalised.elements
+    x[0:6] += error_gain[0:6]
+    x[10:] += error_gain[9:] #not 10 because δtheta has 3 elements
+    #Using joseph form to update P to ensure it remains symmetric positive definite
+    P[:] = (np.eye(15)) - K @ H) @ P (np.eye(len(P)) - K  H).T + K@R@K.T
+    #making a new jacobian G to account for quaternion update
+    G = np.eye(15)
+    # this resets the error theta part of the quaternion after update
+    G[6:9, 6:9] -= skew_symmetric((1/2)*error_gain[6:9])
+    P[:]= G @ P @ G.T
+    return x, P
 
     

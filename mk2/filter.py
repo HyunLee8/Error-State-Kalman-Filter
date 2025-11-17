@@ -58,10 +58,10 @@ def prediction_step(x, P, U, w, dt):
     R = orientation.rotation_matrix
 
     #a_global/a_true equation
-    a_global = R @ (U[0:3] - x[10:13]) - x[-1:]
+    a_global = R @ (U[0:3] - x[10:13]) - x[16:19]
 
     #plug in a_global into the kinematic equations to set position adn velocitt according to the new orientation
-    p_next = x[:3] + x[3:6] + 0.5*a_global*(dt**2)
+    p_next = x[0:3] + x[3:6]*dt + 0.5*a_global*(dt**2)
     v_next = x[3:6] + a_global*dt
     #Here the reason why we get the 3d theta to just one theta is because
     #we want everythin in one step. if we passed in all three if would go in order but that 
@@ -92,10 +92,10 @@ def prediction_step(x, P, U, w, dt):
                     [Z3, Z3, Z3, Z3]])
 
     #PROCESS NOISE COVARIANCE MATRIX 
-    V_i = w[1:2] * dt**2 * I  
-    theta_i = w[2:3] * dt**2 * I
-    A_i = w[3:4]**2 * dt * I
-    omega_i = w[-1:]**2 * dt * I
+    V_i = w[0:1] * dt**2 * I  
+    theta_i = w[1:2] * dt**2 * I
+    A_i = w[2:3]**2 * dt * I
+    omega_i = w[3:4]**2 * dt * I
 
     #putting all the process noise into one matrix
     i = np.array([[V_i],
@@ -104,7 +104,7 @@ def prediction_step(x, P, U, w, dt):
                   [omega_i]])
 
     #Process noise covariance matrix Q | covariance of the of IMU + noise
-    Q_i = np.array([[V_i, Z3, Z3,    Z3],
+    Q_i = np.block([[V_i, Z3, Z3,    Z3],
                     [Z3, theta_i, Z3,Z3],
                     [Z3, Z3, A_i,    Z3],
                     [Z3, Z3, Z3, omega_i]])
@@ -127,8 +127,8 @@ def prediction_step(x, P, U, w, dt):
     #LFG
     return x, P
 
-def update_step(imu_data, x, P, V, dt, altimeter_data=None, gps_data=None,
-                use_position=False, no_accel=False, no_mag=False, should_use_altimeter=True):
+def update_step(imu_data, x, P, V, dt, altimeter_data, gps_data,
+                use_pos=False, use_accel=False, use_magno=False, use_alti=True):
     """
     UPDATE STEP FOR THE FILTER
     imu_data: [am, wm, magm, euler_angles]
@@ -138,51 +138,56 @@ def update_step(imu_data, x, P, V, dt, altimeter_data=None, gps_data=None,
     dt: time step
     """
     #these are the measurements from the IMU, gps, and altimeter
-    y_a = imu_data[0:3]
-    y_m = imu_data[6:9]
-    y_z = altimeter_data
-    y_p = gps_data
+    y_a = (imu_data[0:3]).reshape(3)
+    y_m = (imu_data[6:9]).reshape(3)
+    y_z = np.asarray(altimeter_data) if altimeter_data is not None else None
+    y_p = np.asarray(gps_data) if gps_data is not None else None
 
     #magnetic field in global frame
     #gravity vector from state
-    b = np.array([[1], [0], [0]])
-    g = x[16:-1]
+    b = np.array([1, 0, 0])
+    g = x[16:19]
+
+    #gets the quaternion Orientation from the state vector q
+    orientation = Quaternion(array=x[6:10])
+    R = orientation.rotation_matrix
 
     #creates a matrix for predictions and sensor_data either with or without GPS
-    if use_position():
+    if use_pos and (y_p is not None):
+        #prediction equations with position measurements
         y_a_pred = R.T @ g
         y_m_pred = R.T @ b
         y_z_pred = x[2]
         y_p_pred = x[0:2]
         y_pred = np.hstack((y_a_pred, y_m_pred, y_z_pred, y_p_pred))
-        y = np.hstack((y_a, y_m, y_z, y_p))
+        y = np.hstack([arr for arr in [y_a, y_m, y_p, y_z] if arr is not None])
         dim = 9
+        pos_mode = True
     else:
         y_a_pred = R.T @ g
         y_m_pred = R.T @ b
         y_z_pred = x[2]
-        y_pred = np.vstack((y_a_pred, y_m_pred, y_z_pred))
-        y = np.vstack((y_a, y_m, y_z))
+        y_pred = np.hstack((y_a_pred, y_m_pred, y_z_pred))
+        y = np.hstack((y_a, y_m, y_z))
         dim = 7
+        pos_mode = False
 
     # Create effective V matrix by inflating noise for disabled measurements
     # This is more theoretically correct than setting y_pred = y
     V_effective = V.copy()
-    noise_inflation = 1e10  # Very large noise = filter ignores this measurement
-
-    if not no_accel:
-        V_effective[0:3, 0:3] *= noise_inflation
-    if not no_mag:
-        V_effective[3:6, 3:6] *= noise_inflation
-
-    if should_use_position and y_p is not None:
+    INF = 1e10  # Very large noise = filter ignores this measurement
+    if not use_accel:
+        V_effective[0:3, 0:3] *= INF
+    if not use_magno:
+        V_effective[3:6, 3:6] *= INF
+    if use_pos and y_p is not None:
         # When using position: [accel(0:3), mag(3:6), pos(6:8), alt(8)]
-        if not should_use_altimeter:
-            V_effective[8, 8] *= noise_inflation
+        if not use_alti:
+            V_effective[8, 8] *= INF
     else:
         # When not using position: [accel(0:3), mag(3:6), alt(6)]
-        if not should_use_altimeter:
-            V_effective[6, 6] *= noise_inflation
+        if not use_alti:
+            V_effective[6, 6] *= INF
 
     
     #gets the skew matrix of gravity and magnetic field
@@ -190,28 +195,24 @@ def update_step(imu_data, x, P, V, dt, altimeter_data=None, gps_data=None,
     b_cross = skew_symmetric(b)
     q = x[6:10]
 
-    #perform rotation
-    orientation = Quaternion(array=x[6:10])
-    R = orientation.rotation_matrix
-
     #jacobian matrix for measurement model
     H_a = -R.T @ g_cross
     H_m = -R.T @ b_cross
     H_ya_ma_wrt_q = np.vstack((H_a, H_m))
 
     H_x = np.zeros((dim, 16))
-    H_x[0:6, 6:10] = H_ya_ma_wrt_q
+    H_x[0:6, 6:9] = H_ya_ma_wrt_q
 
-    if use_position():
+    if pos_mode:
         H_x[6:8, 0:2] = np.eye(2) # sets the joacobian for position measurements x, y
-        H_x[8:, 2:3] = 1          # sets the jacobian for altimeter z np.eye(1) = 1
+        H_x[8, 2] = 1.0        # sets the jacobian for altimeter z np.eye(1) = 1
     else:
-        H[6:, 2:3] = 1      
+        H_x[6, 2] = 1.0  # sets the jacobian for altimeter z np.eye(1) = 1 
 
-    Q_x = 0.5 * np.vstack(( -q[1:], skew_symmetric(q))) # adds a stack to the top because its a 4x3 matrix hence -q[]
+    Q_x = 0.5 * np.vstack(( -q[1:], q_skew_symmetric(q))) # adds a stack to the top because its a 4x3 matrix hence -q[]
 
     #Jacobian true state with respect to error state
-    X_x = np.zeros((15,16))
+    X_x = np.zeros((16, 15))
     X_x[6:10, 6:9] = Q_x 
     X_x[0:6, 0:6] = np.eye(6)
     X_x[10:, 9:] = np.eye(6)
@@ -220,20 +221,28 @@ def update_step(imu_data, x, P, V, dt, altimeter_data=None, gps_data=None,
     H = H_x @ X_x
 
     #Kalman Gain -> high = more trust in measurements, low = more trust in prediction
-    K = P @ H.T @ np.linalg.inv(H @ P @ H.T + V_effective)
+    # Kalman gain (use solve for stability)
+    S = H @ P @ H.T + V_effective
+    K = P @ H.T @ np.linalg.inv(S)
     #error gain computation 
-    error_gain = K @ (y - y_pred)
+    #inovation = measurement residual
+    innovation = (y - y_pred)
+    delta = K @ innovation
+    # apply corrections to nominal state
+    x[0:3] += delta[0:3]      # position
+    x[3:6] += delta[3:6]      # velocity
     # update Quaternion with small angle approx.
     # q = q_old ⊗ δq
-    x[6:10] = (Quaternion(array=x[6:10]) * q_rot(error_gain[6:9])).normalised.elements
-    x[0:6] += error_gain[0:6]
-    x[10:] += error_gain[9:] #not 10 because δtheta has 3 elements
+    dq = delta[6:9]
+    x[6:10] = (Quaternion(array=x[6:10]) * q_rot(dq)).normalised.elements
+    x[10:13] += delta[9:12]   # acc bias
+    x[13:16] += delta[12:15]  # gyro bias
     #Using joseph form to update P to ensure it remains symmetric positive definite
     P[:] = (np.eye(15) - K @ H)@P@(np.eye(15) - K@H).T + K@V_effective@K.T
     #making a new jacobian G to account for quaternion update
     G = np.eye(15)
     # this resets the error theta part of the quaternion after update
-    G[6:9, 6:9] -= skew_symmetric((1/2)*error_gain[6:9])
+    G[6:9, 6:9] -= skew_symmetric((1/2)*dq)
     P[:]= G @ P @ G.T
     return x, P
 

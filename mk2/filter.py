@@ -184,27 +184,53 @@ def update(imu_data, x, P, V, dt, altimeter_data, gps_data,
     H_a = -R.T @ g_cross
     H_m = -R.T @ b_cross
     H_ya_ma_wrt_q = np.vstack((H_a, H_m))
+    Q_x = 0.5 * q_skew_symmetric(q)  # 4x3
 
-    H_x = np.zeros((dim, 16))
-    H_x[0:6, 6:9] = H_ya_ma_wrt_q
+    # Build H_x explicitly (measurement rows x true-state cols)
+    true_n = 19
+    err_n = P.shape[0]  # derive error-state dimension from P to avoid mismatches
+    H_x = np.zeros((dim, true_n))
 
+    # accel(3) and mag(3) rows depend on quaternion small-angle (maps into true-state q cols 6:10 -> use 6:9 for error)
+    H_x[0:6, 6:9] = H_ya_ma_wrt_q  # (6 x 3)
+
+    # measurement stacking in y_pred: [accel(3), mag(3), alt(1), pos(2)] when pos_mode True
     if pos_mode:
-        H_x[6:8, 0:2] = np.eye(2) # sets the joacobian for position measurements x, y
-        H_x[8, 2] = 1.0        # sets the jacobian for altimeter z np.eye(1) = 1
+        # altimeter row is at index 6
+        H_x[6, 2] = 1.0
+        # position rows are at indices 7 and 8 (x,y)
+        H_x[7:9, 0:2] = np.eye(2)
     else:
-        H_x[6, 2] = 1.0  # sets the jacobian for altimeter z np.eye(1) = 1 
+        # no position: altimeter row is at index 6
+        H_x[6, 2] = 1.0
 
-    Q_x = 0.5 * np.vstack((q_skew_symmetric(q))) # adds a stack to the top because its a 4x3 matrix hence -q[]
+    # Build X_x (true-state -> error-state) explicitly
+    X_x = np.zeros((true_n, err_n))
+    # position & velocity map to first 6 error cols
+    if err_n >= 6:
+        X_x[0:6, 0:6] = np.eye(6)
+    else:
+        X_x[0:6, 0:err_n] = np.eye(6)[:, :err_n]
 
-    #Jacobian true state with respect to error state
-    X_x = np.zeros((16, 15))
-    X_x[6:10, 6:9] = Q_x 
-    X_x[0:6, 0:6] = np.eye(6)
-    X_x[10:, 9:] = np.eye(6)
+    # quaternion true->error mapping: rows 6:10 in true state, cols 6:9 in error state
+    if err_n > 6:
+        qcols = min(3, err_n - 6)
+        X_x[6:10, 6:6+qcols] = Q_x[:, :qcols]
 
-    #state to sensor measurement jacobian
+    # accel bias true indices 10:13 -> error cols 9:12
+    if err_n > 9:
+        bcols = min(3, err_n - 9)
+        X_x[10:13, 9:9+bcols] = np.eye(3)[:, :bcols]
+
+    # gyro bias true indices 13:16 -> error cols 12:15
+    if err_n > 12:
+        gcols = min(3, err_n - 12)
+        X_x[13:16, 12:12+gcols] = np.eye(3)[:, :gcols]
+
+    # gravity (true indices 16:19) not part of 15-element error state -> leave zeros
+
+    # state-to-sensor measurement jacobian (dim x err_n)
     H = H_x @ X_x
-
     #Kalman Gain -> high = more trust in measurements, low = more trust in prediction
     # Kalman gain (use solve for stability)
     S = H @ P @ H.T + V_effective
@@ -219,16 +245,15 @@ def update(imu_data, x, P, V, dt, altimeter_data, gps_data,
     # update Quaternion with small angle approx.
     # q = q_old ⊗ δq
     dq = delta[6:9]
-    x[6:10] = (Quaternion(array=x[6:10]) * q_rot(dq)).normalised.elements
+    x[6:10] = (Quaternion(array=x[6:10]) * q_rot(dq)).normalised.elements.reshape(4,1)
     x[10:13] += delta[9:12]   # acc bias
     x[13:16] += delta[12:15]  # gyro bias
     #Using joseph form to update P to ensure it remains symmetric positive definite
-    P[:] = (np.eye(15) - K @ H)@P@(np.eye(15) - K@H).T + K@V_effective@K.T
+    P[:] = (np.eye(18) - K @ H)@P@(np.eye(18) - K@H).T + K@V_effective@K.T
     #making a new jacobian G to account for quaternion update
-    G = np.eye(15)
+    G = np.eye(18)
     # this resets the error theta part of the quaternion after update
     G[6:9, 6:9] -= skew_symmetric((1/2)*dq)
     P[:]= G @ P @ G.T
     return x, P
 
-    

@@ -74,43 +74,55 @@ sigma_w_walk = 0.0001
 
 
 def main():
-	i = 0
-	x = propagate_nominal_state(p, v, q, ab, wb, g)
-	P = np.eye(18)  # Initial error covariance matrix
-	U = imu_inputs(am, wm, magm, euler_angles)
-	w = get_sigmas(sigma_a_noise, sigma_w_noise, sigma_a_walk, sigma_w_walk)
-	V = np.diag([
-			0.0001, 0.0001, 0.0001,     # accelerometer x,y,z
-			0.000001, 0.000001, 0.000001, # gyroscope x,y,z
-			0.01, 0.01, 0.01,           # magnetometer x,y,z
-			1.0, 1.0, 1.0,              # GPS position x,y,z (if used)
-			0.01                         # altimeter (if used)
-		])
-	while(True):
-		dt = imu_data['Time(ms)'].iloc[i+1] - imu_data['Time(ms)'].iloc[i]
-		ax = imu_data['AccX(m/s^2)'].iloc[i]
-		ay = imu_data['AccY(m/s^2)'].iloc[i]
-		az = imu_data['AccZ(m/s^2)'].iloc[i]
-		wx = imu_data['GyroX(rad/s)'].iloc[i]
-		wy = imu_data['GyroY(rad/s)'].iloc[i]
-		wz = imu_data['GyroZ(rad/s)'].iloc[i]
-		mag_x = imu_data['MagX(uT)'].iloc[i]
-		mag_y = imu_data['MagY(uT)'].iloc[i]
-		mag_z = imu_data['MagZ(uT)'].iloc[i]
-		roll, pitch, yaw = imu_data['Roll(deg)'].iloc[i], imu_data['Pitch(deg)'].iloc[i], imu_data['Yaw(deg)'].iloc[i]
+    total_time = 0.0
+    i = 0
+    logs = []  # Initialize log list
 
-		x, P = predict(x, P, U, w, dt)
+    x = propagate_nominal_state(p, v, q, ab, wb, g)
+    P = np.eye(18)  # Initial error covariance matrix
+    U = imu_inputs(am, wm, magm, euler_angles)
+    w = get_sigmas(sigma_a_noise, sigma_w_noise, sigma_a_walk, sigma_w_walk)
+    V = np.diag([
+        0.0001, 0.0001, 0.0001,        # accelerometer x,y,z
+        0.000001, 0.000001, 0.000001,  # gyroscope x,y,z
+        0.01                             # altimeter
+    ])
 
-		print(f'Predicted orientation at time {i} :', x[6:10].flatten())
+    while True:
+        dt = imu_data['Time(ms)'].iloc[i+1] - imu_data['Time(ms)'].iloc[i]
+        ax = imu_data['AccX(m/s^2)'].iloc[i]
+        ay = imu_data['AccY(m/s^2)'].iloc[i]
+        az = imu_data['AccZ(m/s^2)'].iloc[i]
+        wx = imu_data['GyroX(rad/s)'].iloc[i]
+        wy = imu_data['GyroY(rad/s)'].iloc[i]
+        wz = imu_data['GyroZ(rad/s)'].iloc[i]
+        mag_x = imu_data['MagX(uT)'].iloc[i]
+        mag_y = imu_data['MagY(uT)'].iloc[i]
+        mag_z = imu_data['MagZ(uT)'].iloc[i]
+        roll, pitch, yaw = imu_data['Roll(deg)'].iloc[i], imu_data['Pitch(deg)'].iloc[i], imu_data['Yaw(deg)'].iloc[i]
 
-		x, P = update(sensor_data, x, P, V, dt, altimeter_data=False, gps_data=False,
-				use_pos=False, use_accel=False, use_magno=False, use_alti=True)
+        # Predict step
+        x, P = predict(x, P, U, w, dt)
+        total_time += dt
+        print(f'Predicted orientation at time t={total_time} :', x[6:10].flatten())
 
-		print("Updated State:", x)
-		print("Updated Covariance:", P)
-		i += 1
+        # Update step
+        x, P = update(sensor_data, x, P, V, dt, altimeter_data=False, gps_data=False,
+                      use_pos=False, use_accel=False, use_magno=False, use_alti=True)
+        print(f'Updated orientation at time t={total_time} :', x[6:10].flatten())
 
+        # Append to logs
+        #logs.append([total_time] + x[6:10].tolist())
+
+        i += 1
+
+        # Optional: break loop at end of data
+        #if i >= len(imu_data) - 1:
+        #   break
+
+    # Convert logs to DataFrame and save CSV
+    #df_logs = pd.DataFrame(logs, columns=['time_ms', 'q0', 'q1', 'q2', 'q3'])
+    #df_logs.to_csv('orientation_log.csv', index=False)
 
 if __name__ == "__main__":
-	main()
-
+    main()

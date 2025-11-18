@@ -4,12 +4,6 @@ import numpy as np
 from numpy.linalg import norm
 from pyquaternion import Quaternion
 import time
-from propagation import (
-    propogate_nominal_state,
-    imu_inputs,
-    get_u_corrected,
-    get_process_noise
-)
 
 """
 FILTER.PY
@@ -43,7 +37,7 @@ def q_rot(three_dimensional_theta):
         #creates error state quaternion. normalised because small angle approx
     
 
-def prediction_step(x, P, U, w, dt):
+def predict(x, P, U, w, dt):
     """
     PREDICTION STEP FOR THE FILTER
     x: [p, v, q, ab, wb, g] state vector
@@ -92,16 +86,10 @@ def prediction_step(x, P, U, w, dt):
                     [Z3, Z3, Z3, Z3]])
 
     #PROCESS NOISE COVARIANCE MATRIX 
-    V_i = w[0:1] * dt**2 * I  
-    theta_i = w[1:2] * dt**2 * I
-    A_i = w[2:3]**2 * dt * I
-    omega_i = w[3:4]**2 * dt * I
-
-    #putting all the process noise into one matrix
-    i = np.array([[V_i],
-                  [theta_i],
-                  [A_i],
-                  [omega_i]])
+    V_i = w[0]**2 * dt**2 * I  
+    theta_i = w[1]**2 * dt**2 * I
+    A_i = w[2]**2 * dt * I
+    omega_i = w[3]**2 * dt * I
 
     #Process noise covariance matrix Q | covariance of the of IMU + noise
     Q_i = np.block([[V_i, Z3, Z3,    Z3],
@@ -111,12 +99,14 @@ def prediction_step(x, P, U, w, dt):
 
     #Rotated skew matrix for acceleration and gyro
     rsa = -R @ skew_symmetric(U[0:3] - x[10:13]) * dt
-    rsg = R.T @ skew_symmetric(U[3:6] - x[13:16]) * dt
+    rsw = R.T @ skew_symmetric(U[3:6] - x[13:16]) * dt
 
     #JACOBIAN MATRIX for how state evolves determinstically
+    F_x = np.zeroes((19,19))
+    F_x[0] = I
     F_x = np.array([[I, I*dt, Z3, Z3, Z3,    Z3],
-                    [Z3, I,  rsa, -R, Z3,  I*dt],
-                    [Z3, Z3, rsg, Z3, -I*dt, Z3],
+                    [Z3, I,  rsa, -R*dt, Z3,  I*dt],
+                    [Z3, Z3, rsw, Z3, -I*dt, Z3],
                     [Z3, Z3, Z3, I, Z3,      Z3],
                     [Z3, Z3, Z3, Z3, I,      Z3],
                     [Z3, Z3, Z3, Z3, Z3,      I]])
@@ -127,7 +117,7 @@ def prediction_step(x, P, U, w, dt):
     #LFG
     return x, P
 
-def update_step(imu_data, x, P, V, dt, altimeter_data, gps_data,
+def update(imu_data, x, P, V, dt, altimeter_data, gps_data,
                 use_pos=False, use_accel=False, use_magno=False, use_alti=True):
     """
     UPDATE STEP FOR THE FILTER
@@ -160,7 +150,7 @@ def update_step(imu_data, x, P, V, dt, altimeter_data, gps_data,
         y_z_pred = x[2]
         y_p_pred = x[0:2]
         y_pred = np.hstack((y_a_pred, y_m_pred, y_z_pred, y_p_pred))
-        y = np.hstack([arr for arr in [y_a, y_m, y_p, y_z] if arr is not None])
+        y = np.hstack((y_a, y_m, y_z, y_p))
         dim = 9
         pos_mode = True
     else:

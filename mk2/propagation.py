@@ -35,8 +35,8 @@ ab = accelerometer bias
 wb = gyroscope bias
 gt = gravity vector
 """
-def propogate_nominal_state(p, v, q, ab, wb, g):
-    return x = [p, v, q, ab, wb, g]
+def propagate_nominal_state(p, v, q, ab, wb, g):
+    return [p, v, q, ab, wb, g]
     
 
 
@@ -60,4 +60,4 @@ NOISE VECTOR
 sigma
 """
 def get_sigmas(sigma_a_noise, sigma_w_noise, sigma_a_walk, sigma_w_walk):
-    return w = [np.array([[sigma_a_noise], [sigma_w_noise], [sigma_a_walk], [sigma_w_walk]])]
+    return [np.array([[sigma_a_noise], [sigma_w_noise], [sigma_a_walk], [sigma_w_walk]])]

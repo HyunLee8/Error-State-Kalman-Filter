@@ -4,9 +4,11 @@ LIVE FILTER
 This module will contain the live filtering loop that
 will call the propagation and filter update steps.
 """
-
+import os
 import numpy as np
 import pandas as pd
+from filter import predict, update
+from propagation import propagate_nominal_state, imu_inputs, get_u_corrected, get_sigmas
 imu_data = pd.read_csv('IMU_data.csv')
 
 """
@@ -18,6 +20,17 @@ ab = accelerometer bias
 wb = gyroscope bias
 gt = gravity vector
 """
+dt = imu_data['Time(ms)'].iloc[1] - imu_data['Time(ms)'].iloc[0]
+ax = imu_data['AccX(m/s^2)'].iloc[0]
+ay = imu_data['AccY(m/s^2)'].iloc[0]
+az = imu_data['AccZ(m/s^2)'].iloc[0]
+wx = imu_data['GyroX(rad/s)'].iloc[0]
+wy = imu_data['GyroY(rad/s)'].iloc[0]
+wz = imu_data['GyroZ(rad/s)'].iloc[0]
+mag_x = imu_data['MagX(uT)'].iloc[0]
+mag_y = imu_data['MagY(uT)'].iloc[0]
+mag_z = imu_data['MagZ(uT)'].iloc[0]
+roll, pitch, yaw = imu_data['Roll(deg)'].iloc[0], imu_data['Pitch(deg)'].iloc[0], imu_data['Yaw(deg)'].iloc[0]
 px, py, pz = 0.0, 0.0, 0.0
 vx, vy, vz = 0.0, 0.0, 0.0
 qw, qx, qy, qz = 1.0, 0.0, 0.0, 0.0
@@ -41,22 +54,11 @@ wx, wy, wz = gyroscope measurements
 mag_x, mag_y, mag_z = magnetometer measurements
 roll, pitch, yaw = euler angles from IMU
 """
-dt = imu_data['Time(ms)'].[i+1] - imu_data['Time(ms)'].[i]
-ax = imu_data['AccX(m/s^2)'].[i]
-ay = imu_data['AccY(m/s^2)'].[i]
-az = imu_data['AccZ(m/s^2)'].[i]
-wx = imu_data['GyroX(rad/s)'].[i]
-wy = imu_data['GyroY(rad/s)'].[i]
-wz = imu_data['GyroZ(rad/s)'].[i]
-mag_x = imu_data['MagX(uT)'].[i]
-mag_y = imu_data['MagY(uT)'].[i]
-mag_z = imu_data['MagZ(uT)'].[i]
-roll, pitch, yaw = imu_data['Roll(deg)'].[i], imu_data['Pitch(deg)'].[i], imu_data['Yaw(deg)'].[i]
 am = np.array([[ax], [ay], [az]])
 wm = np.array([[wx], [wy], [wz]])
 magm = np.array([[mag_x], [mag_y], [mag_z]])
 euler_angles = np.array([[roll], [pitch], [yaw]])
-imu_data = np.vstack((am, wm, magm, euler_angles))
+sensor_data = np.vstack((am, wm, magm, euler_angles))
 
 """
 NOISE VECOTR
@@ -70,4 +72,39 @@ sigma_w_noise = 0.001
 sigma_a_walk = 0.0001
 sigma_w_walk = 0.0001
 
+
+def main():
+	x = propagate_nominal_state(p, v, q, ab, wb, g)
+	P = np.eye(19)  # Initial error covariance matrix
+	U = imu_inputs(am, wm, magm, euler_angles)
+	w = get_sigmas(sigma_a_noise, sigma_w_noise, sigma_a_walk, sigma_w_walk)
+	dt = dt
+	while(True):
+		dt = imu_data['Time(ms)'].iloc[i+1] - imu_data['Time(ms)'].iloc[i]
+		ax = imu_data['AccX(m/s^2)'].iloc[i]
+		ay = imu_data['AccY(m/s^2)'].iloc[i]
+		az = imu_data['AccZ(m/s^2)'].iloc[i]
+		wx = imu_data['GyroX(rad/s)'].iloc[i]
+		wy = imu_data['GyroY(rad/s)'].iloc[i]
+		wz = imu_data['GyroZ(rad/s)'].iloc[i]
+		mag_x = imu_data['MagX(uT)'].iloc[i]
+		mag_y = imu_data['MagY(uT)'].iloc[i]
+		mag_z = imu_data['MagZ(uT)'].iloc[i]
+		roll, pitch, yaw = imu_data['Roll(deg)'].iloc[i], imu_data['Pitch(deg)'].iloc[i], imu_data['Yaw(deg)'].iloc[i]
+
+		x, P = predict(x, P, U, w, dt)
+
+		print("Predicted State:", x)
+		print("Predicted Covariance:", P)
+
+		x, P = update(sensor_data, x, P, V, dt, altimeter_data, gps_data,
+				use_pos=False, use_accel=False, use_magno=False, use_alti=True)
+
+		print("Updated State:", x)
+		print("Updated Covariance:", P)
+		i += 1
+
+
+if __name__ == "__main__":
+	main()
 

@@ -1,4 +1,4 @@
-# NIMBUS MISSLE: Quaternion Filter for flight computer (Still in progress)
+# Extended Error State Kalman Filter w/ Quaternions
 
 Orientation vs. Time
 

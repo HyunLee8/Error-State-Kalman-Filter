@@ -2,7 +2,7 @@
 
 Orientation vs. Time
 
-https://github.com/HyunLee8/Quaternion-Filter/blob/main/docs/orientation_time.png?raw=true
+![image alt](https://github.com/HyunLee8/Quaternion-Filter/blob/main/docs/orientation_time.png?raw=true)
 
 resources:
 

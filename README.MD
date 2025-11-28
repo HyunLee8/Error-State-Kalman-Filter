@@ -1,5 +1,9 @@
 # NIMBUS MISSLE: Quaternion Filter for flight computer (Still in progress)
 
+Orientation vs. Time
+
+https://github.com/HyunLee8/Quaternion-Filter/blob/main/docs/orientation_time.png?raw=true
+
 resources:
 
 basic filter: 

@@ -1,5 +1,7 @@
 # Extended Error State Kalman Filter w/ Quaternions
 
+This project implements an Extended Error State Kalman Filter (ESKF) designed for systems that estimate 3D orientation, position, and velocity using quaternion-based attitude representation. The ESKF formulation decomposes the system state into a nominal state and a small error state, enabling numerically stable and computationally efficient filtering for inertial navigation and sensor fusion applications.
+
 ## Orientation vs. Time
 
 ![image alt](https://github.com/HyunLee8/Quaternion-Filter/blob/main/docs/orientation_time.png?raw=true)

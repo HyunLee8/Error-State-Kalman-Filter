@@ -1,9 +1,12 @@
-from filter import ESKF
+from filter import ESKF, Data
 import pandas as pd
 
-TrueFilter = ESKF
+data = Data()
+TrueFilter = ESKF(data)
 
 def run_filter():
-    for TrueFilter.iteration < 5000:
+    while TrueFilter.iteration < 5000:
         TrueFilter.predict()
         TrueFilter.update()
+
+    #TrueFilter.save_results('quaternion_results.csv') ~~ csv loading only

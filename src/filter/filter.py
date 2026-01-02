@@ -3,22 +3,71 @@ from typing import Tuple
 import numpy as np
 from numpy.linalg import norm
 from pyquaternion import Quaternion
+import pandas as pd
 import time
+import os
 
-"""
-FILTER.PY
-This module will contain the prediction step and the
-update step of the ESKF filter.
-"""
+HERE = os.path.dirname(os.path.abspath(__file__))
+CSV_SENSOR_PATH = os.path.join(HERE, 'sensor_data.csv')
+CSV_MOTION_PATH = os.path.join(HERE, 'motion_data.csv')
+sensor_data = pd.read_csv(CSV_SENSOR_PATH)
+motion_data = pd.read_csv(CSV_MOTION_PATH)
+
+class Data:
+    def __init__(self):
+        self.TimeCol = 0
+        self.AccXCol = 1
+        self.AccYCol = 2
+        self.AccZCol = 3
+        self.GyroXCol = 4
+        self.GyroYCol = 5
+        self.GyroZCol = 6
+        self.PosX = 0
+        self.PosY = 1
+        self.PosZ = 2
+        self.VelX = 3
+        self.VelY = 4
+        self.VelZ = 5
+        self.sensor_data = sensor_data
+        self.motion_data = motion_data
+
+    def get_imu_vectors(self, i):
+        gyro = np.array([
+            self.sensor_data.iloc[i, self.GyroXCol],
+            self.sensor_data.iloc[i, self.GyroYCol],
+            self.sensor_data.iloc[i, self.GyroZCol]
+        ])
+        acc = np.array([
+            self.sensor_data.iloc[i, self.AccXCol],
+            self.sensor_data.iloc[i, self.AccYCol],
+            self.sensor_data.iloc[i, self.AccZCol],
+        ])
+        dt = self.motion_data.iloc[i + 1, self.TimeCol] - self.motion_data.iloc[i, self.TimeCol]
+        return gyro, acc, dt
+    
+    def get_motion_vectors(self, i):
+        Pos = np.array([
+            self.motion_data.iloc[i, self.PosX],
+            self.motion_data.iloc[i, self.PosY],
+            self.motion_data.iloc[i, self.PosZ]
+        ])
+        Vel = np.array([
+            self.motion_data.iloc[i, self.VelX],
+            self.motion_data.iloc[i, self.VelY],
+            self.motion_data.iloc[i, self.VelZ]
+        ])
+        return Pos, Vel
 
 class ESKF:
     def __init__(self, 
-                 sig_a_noise=0.1, 
-                 sig_a_walk=0.1, 
-                 sig_w_noise=0.1, 
-                 sig_w_walk=0.1, 
-                 gravity=9.81):
+                data_obj,
+                sig_a_noise=0.1,   #ACCELERATION NOISE PARAMTER
+                sig_a_walk=0.1,    #ACCELERATION WALK PARAMETER
+                sig_w_noise=0.1,   #GYRO NOISE PARAMETER
+                sig_w_walk=0.1,    #GYRO WALK PARAMTER
+                gravity=9.81):
         self.iteration = 0
+        self.data_obj = data_obj
         self.X = np.zeros(16)
         self.X[3] = 1
         self.error_state = np.zeros(15)
@@ -30,9 +79,12 @@ class ESKF:
             sig_w_walk**2, sig_w_walk**2, sig_w_walk**2, 
         ])
         self.gravity = np.array([0, 0, gravity])
-        self.gyro, self.acc, self.dt = Data.get_imu_data(itteration)
+        self.gyro, self.acc, self.dt = self.data_obj.get_imu_vectors(self.iteration)  # Use property
+        self.pos, self.vel = self.data_obj.get_motion_vectors(self.iteration)
+        self.measurement = np.hstack((self.pos, self.vel))
         self.U = np.hstack((self.acc, self.gyro))
         self.R = None
+        #self.results = [] ~~ for csv loading only
 
     def skew_symmetric(self, v):
         vx, vy, vz = v.flatten()
@@ -117,9 +169,9 @@ class ESKF:
 
         self.iteration = self.iteration + 1
 
-    def update(self, measurement, R_measurement=None):
-        measurement = np.asarray(measurement).flatten()
-        meas_size = len(measurement)
+    def update(self, R_measurement=None):
+        self.measurement = np.asarray(self.measurement).flatten()
+        meas_size = len(self.measurement)
 
         p = self.X[0:3]
         v = self.X[7:10]
@@ -132,14 +184,14 @@ class ESKF:
             # Position only
             H = np.zeros((3, 15))
             H[0:3, 0:3] = np.eye(3)
-            y = measurement.reshape(3, 1) - p.reshape(3, 1)
+            y = self.measurement.reshape(3, 1) - p.reshape(3, 1)
         elif meas_size == 6:  # FIXED: was only handling 6D case
             # Position and velocity
             H = np.zeros((6, 15))
             H[0:3, 0:3] = np.eye(3)
             H[3:6, 6:9] = np.eye(3)
             predicted = np.vstack([p.reshape(3, 1), v.reshape(3, 1)])
-            y = measurement.reshape(6, 1) - predicted
+            y = self.measurement.reshape(6, 1) - predicted
         else:
             raise ValueError(f"Measurement size {meas_size} not supported. Use 3 or 6.")
 
@@ -184,4 +236,20 @@ class ESKF:
         # Reset error state to zero
         self.error_state = np.zeros(15)
 
+        self.results.append({
+            'time': time.time(),
+            'qw': self.X[3],
+            'qx': self.X[4],
+            'qy': self.X[5],
+            'qz': self.X[6]
+        })
+        
+
         print(f"Time: {time.time():.6f} | Quaternion: [{self.X[3]:.6f}, {self.X[4]:.6f}, {self.X[5]:.6f}, {self.X[6]:.6f}]")
+    
+    #def save_results(self, filename='quaternion_results.csv'):
+    #    """Save results to CSV"""
+    #    import pandas as pd
+    #    df = pd.DataFrame(self.results)
+    #    df.to_csv(filename, index=False)
+    #    print(f"Results saved to {filename}")

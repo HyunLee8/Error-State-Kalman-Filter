@@ -2,7 +2,7 @@
 
 A Python implementation of an Error-State Kalman Filter for fusing IMU (Inertial Measurement Unit) data with position/velocity measurements to estimate 3D orientation, velocity, position, and sensor biases.
 
-## Tests
+## Data
 
 <table>
   <tr>

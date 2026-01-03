@@ -48,7 +48,7 @@ This implementation is based on the following resources:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/ErrorStateKalmanFilter.git
+git clone https://github.com/hyunlee8/ErrorStateKalmanFilter.git
 cd ErrorStateKalmanFilter
 ```
 

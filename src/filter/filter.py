@@ -79,7 +79,7 @@ class ESKF:
             sig_w_walk**2, sig_w_walk**2, sig_w_walk**2, 
         ])
         self.gravity = np.array([0, 0, gravity])
-        self.gyro, self.acc, self.dt = self.data_obj.get_imu_vectors(self.iteration)  # Use property
+        self.gyro, self.acc, self.dt = self.data_obj.get_imu_vectors(self.iteration)
         self.pos, self.vel = self.data_obj.get_motion_vectors(self.iteration)
         self.measurement = np.hstack((self.pos, self.vel))
         self.U = np.hstack((self.acc, self.gyro))
@@ -180,12 +180,12 @@ class ESKF:
         if R_measurement is None:
             R_measurement = np.eye(meas_size) * 0.1
 
-        if meas_size == 3:  # FIXED: added this case (was missing)
+        if meas_size == 3:
             # Position only
             H = np.zeros((3, 15))
             H[0:3, 0:3] = np.eye(3)
             y = self.measurement.reshape(3, 1) - p.reshape(3, 1)
-        elif meas_size == 6:  # FIXED: was only handling 6D case
+        elif meas_size == 6:
             # Position and velocity
             H = np.zeros((6, 15))
             H[0:3, 0:3] = np.eye(3)
@@ -202,7 +202,6 @@ class ESKF:
         # Update error state
         self.error_state = (K @ y).flatten()
 
-        # Update error covariance (Joseph form)
         I_KH = np.eye(15) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ R_measurement @ K.T
 
@@ -233,7 +232,6 @@ class ESKF:
         self.X[10:13] += δab
         self.X[13:16] += δwb
 
-        # Reset error state to zero
         self.error_state = np.zeros(15)
 
         self.results.append({
